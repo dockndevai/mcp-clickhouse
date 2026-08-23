@@ -1,0 +1,55 @@
+{
+  "name": "mcp-clickhouse",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for ClickHouse — query and manage databases with SQL-classification-based security modes and access-control flags.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dockndevai/mcp-clickhouse.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dockndevai/mcp-clickhouse/issues"
+  },
+  "homepage": "https://github.com/dockndevai/mcp-clickhouse#readme",
+  "bin": {
+    "mcp-clickhouse": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "clickhouse",
+    "olap",
+    "sql",
+    "observability",
+    "llm",
+    "ai"
+  ],
+  "dependencies": {
+    "@clickhouse/client": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.7"
+  }
+}
