@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/dockndevai/mcp-clickhouse/actions/workflows/ci.yml/badge.svg)](https://github.com/dockndevai/mcp-clickhouse/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/@dockndevai/mcp-clickhouse)](https://www.npmjs.com/package/@dockndevai/mcp-clickhouse)
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for **ClickHouse**. It lets an MCP-capable client (Claude Desktop, Claude Code, etc.) explore schemas, run analytical queries, and manage the database — with behaviour controlled entirely by flags.
 
@@ -35,42 +36,83 @@ Statement classification lives in `src/sql.ts` and is fail-safe: `ALTER … DELE
 
 **Write/Admin** (`read-write`+): `execute` — runs a single statement after classifying it; writes need read-write mode, destructive statements need admin mode + `CLICKHOUSE_ALLOW_DELETE`.
 
-## Use with your MCP client
+## Quickstart — add to your agent
 
-Works with Claude Code, Claude Desktop, Cursor, OpenAI Codex CLI, Windsurf, VS Code (Copilot), and any other MCP client — see **[docs/CLIENTS.md](docs/CLIENTS.md)** for per-client setup.
+Published on npm as [`@dockndevai/mcp-clickhouse`](https://www.npmjs.com/package/@dockndevai/mcp-clickhouse). No clone or build needed — your MCP client runs it on demand with `npx`. **Start in `read-only` mode**; see [`.env.example`](.env.example) for every variable and [docs/CLIENTS.md](docs/CLIENTS.md) for the full per-client guide.
 
-## Install
+**Claude Code** (CLI)
 
 ```bash
-npm install
-npm run build
+claude mcp add clickhouse -e CLICKHOUSE_URL="http://localhost:8123" -e CLICKHOUSE_USER="default" -e CLICKHOUSE_MODE="read-only" -- npx -y @dockndevai/mcp-clickhouse
 ```
 
-## Run with Claude Desktop / Claude Code
+**Claude Desktop · Cursor · Windsurf** — same block in `claude_desktop_config.json`, `.cursor/mcp.json`, or `~/.codeium/windsurf/mcp_config.json`:
 
 ```json
 {
   "mcpServers": {
     "clickhouse": {
-      "command": "node",
-      "args": ["/absolute/path/to/mcp-clickhouse/dist/index.js"],
+      "command": "npx",
+      "args": [
+        "-y",
+        "@dockndevai/mcp-clickhouse"
+      ],
       "env": {
-        "CLICKHOUSE_URL": "http://clickhouse:8123",
-        "CLICKHOUSE_USER": "readonly",
-        "CLICKHOUSE_PASSWORD": "…",
-        "CLICKHOUSE_MODE": "read-only",
-        "CLICKHOUSE_DATABASE_ALLOWLIST": "analytics"
+        "CLICKHOUSE_URL": "http://localhost:8123",
+        "CLICKHOUSE_USER": "default",
+        "CLICKHOUSE_MODE": "read-only"
       }
     }
   }
 }
 ```
 
-### Example prompts
+**OpenAI Codex CLI** — in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.clickhouse]
+command = "npx"
+args = ["-y", "@dockndevai/mcp-clickhouse"]
+env = { CLICKHOUSE_URL = "http://localhost:8123", CLICKHOUSE_USER = "default", CLICKHOUSE_MODE = "read-only" }
+```
+
+**VS Code (GitHub Copilot, Agent mode)** — in `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "clickhouse": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@dockndevai/mcp-clickhouse"
+      ],
+      "env": {
+        "CLICKHOUSE_URL": "http://localhost:8123",
+        "CLICKHOUSE_USER": "default",
+        "CLICKHOUSE_MODE": "read-only"
+      }
+    }
+  }
+}
+```
+
+## Example prompts
 
 - *"What are the biggest tables in the `analytics` database?"*
 - *"Show me the schema for `events` and run a query for daily counts this week."*
 - *"Which queries are currently running and using the most memory?"*
+
+## Run from source (development)
+
+Prefer the published package above. To run from a clone:
+
+```bash
+npm install
+npm run build
+node dist/index.js   # with the environment variables set
+```
 
 ## Develop
 
