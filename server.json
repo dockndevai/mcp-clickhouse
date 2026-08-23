@@ -12,7 +12,7 @@
     {
       "registry_type": "npm",
       "registry_base_url": "https://registry.npmjs.org",
-      "identifier": "mcp-clickhouse",
+      "identifier": "@dockndevai/mcp-clickhouse",
       "version": "0.1.0",
       "transport": {
         "type": "stdio"
