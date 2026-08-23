@@ -35,6 +35,10 @@ Statement classification lives in `src/sql.ts` and is fail-safe: `ALTER … DELE
 
 **Write/Admin** (`read-write`+): `execute` — runs a single statement after classifying it; writes need read-write mode, destructive statements need admin mode + `CLICKHOUSE_ALLOW_DELETE`.
 
+## Use with your MCP client
+
+Works with Claude Code, Claude Desktop, Cursor, OpenAI Codex CLI, Windsurf, VS Code (Copilot), and any other MCP client — see **[docs/CLIENTS.md](docs/CLIENTS.md)** for per-client setup.
+
 ## Install
 
 ```bash
@@ -75,6 +79,10 @@ npm run dev
 npm test          # SQL classification + security policy (30 tests)
 npm run typecheck
 ```
+
+## Publishing
+
+This server ships a [`server.json`](server.json) for the official MCP registry and an [`mcpName`](package.json) for npm ownership validation. See **[PUBLISHING.md](PUBLISHING.md)** for publishing to npm and listing on the MCP registry, Smithery, Glama, Cursor, and PulseMCP.
 
 ## License
 
