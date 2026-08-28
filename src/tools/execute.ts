@@ -14,6 +14,8 @@ export const writeTools: ToolDef[] = [
   {
     name: "execute",
     capability: "write",
+    // A single statement may be destructive (DROP/TRUNCATE/DELETE), gated at runtime.
+    destructive: true,
     config: {
       title: "Execute a statement",
       description:
