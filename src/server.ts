@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CHClient } from "./clickhouse/client.js";
 import type { AppConfig } from "./config.js";
+import { makeConfirmer } from "./elicit.js";
 import { PolicyError, SecurityPolicy } from "./security.js";
 import { annotationsFor } from "./tools/annotations.js";
 import { readTools } from "./tools/read.js";
@@ -16,9 +17,8 @@ export function buildServer(config: AppConfig): {
 } {
   const policy = new SecurityPolicy(config.security);
   const client = new CHClient(config.connection);
-  const ctx: ToolContext = { client, policy };
-
-  const server = new McpServer({ name: "mcp-clickhouse", version: "0.1.3" });
+  const server = new McpServer({ name: "mcp-clickhouse", version: "0.2.0" });
+  const ctx: ToolContext = { client, policy, confirm: makeConfirmer(server) };
 
   const enabled: string[] = [];
   for (const tool of ALL_TOOLS) {

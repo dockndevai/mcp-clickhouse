@@ -30,7 +30,7 @@ export const writeTools: ToolDef[] = [
           .describe("Database the statement targets (for allowlist + protection checks)"),
       },
     },
-    handler: async (args, { client, policy }) => {
+    handler: async (args, { client, policy, confirm }) => {
       const sql = args.sql as string;
       const database = args.database as string | undefined;
       const classification = classifyStatement(sql);
@@ -64,6 +64,16 @@ export const writeTools: ToolDef[] = [
         return textResult(
           `[dry-run] Would execute (${classification.class}/${classification.keyword}): ${sql}`,
         );
+      }
+
+      // Destructive statements (DROP/TRUNCATE/DELETE) get a human checkpoint.
+      if (destructive) {
+        const ok = await confirm.confirm({
+          action: `run ${classification.keyword}`,
+          target: sql.length > 120 ? `${sql.slice(0, 117)}…` : sql,
+          details: { database },
+        });
+        if (!ok.approved) return textResult(`Statement cancelled — ${ok.reason}.`);
       }
 
       if (classification.class === "read") {
