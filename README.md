@@ -27,6 +27,7 @@ The security model is **statement-aware**: every SQL statement is classified as 
 | Result size cap | `CLICKHOUSE_MAX_ROWS` | `1000` | Hard cap on rows returned to the model. |
 | Preview without executing | `CLICKHOUSE_DRY_RUN` | `false` | Write/destructive statements validate + log intent, then return. |
 | Audit trail | `CLICKHOUSE_AUDIT_LOG` | `true` | Emits a JSON line to stderr per guarded operation. |
+| Interactive confirmation | *(automatic)* | — | Destructive & high-impact actions prompt the human to approve via MCP elicitation before running; clients without elicitation fall back to the `*_ALLOW_*` gate. |
 
 Statement classification lives in `src/sql.ts` and is fail-safe: `ALTER … DELETE/UPDATE` counts as destructive, and anything unparseable is treated as destructive.
 
