@@ -17,7 +17,7 @@ export function buildServer(config: AppConfig): {
 } {
   const policy = new SecurityPolicy(config.security);
   const client = new CHClient(config.connection);
-  const server = new McpServer({ name: "mcp-clickhouse", version: "0.2.1" });
+  const server = new McpServer({ name: "mcp-clickhouse", version: "0.2.2" });
   const ctx: ToolContext = { client, policy, confirm: makeConfirmer(server) };
 
   const enabled: string[] = [];
