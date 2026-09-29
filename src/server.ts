@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CHClient } from "./clickhouse/client.js";
 import type { AppConfig } from "./config.js";
 import { makeConfirmer } from "./elicit.js";
+import { GuardClient, loadGuardConfig } from "./guard.js";
 import { PolicyError, SecurityPolicy } from "./security.js";
 import { annotationsFor } from "./tools/annotations.js";
 import { readTools } from "./tools/read.js";
@@ -17,8 +18,9 @@ export function buildServer(config: AppConfig): {
 } {
   const policy = new SecurityPolicy(config.security);
   const client = new CHClient(config.connection);
-  const server = new McpServer({ name: "mcp-clickhouse", version: "0.2.2" });
-  const ctx: ToolContext = { client, policy, confirm: makeConfirmer(server) };
+  const server = new McpServer({ name: "mcp-clickhouse", version: "0.3.0" });
+  const guard = new GuardClient(loadGuardConfig());
+  const ctx: ToolContext = { client, policy, confirm: makeConfirmer(server), guard };
 
   const enabled: string[] = [];
   for (const tool of ALL_TOOLS) {
@@ -26,6 +28,10 @@ export function buildServer(config: AppConfig): {
     enabled.push(tool.name);
     server.registerTool(tool.name, { ...tool.config, annotations: annotationsFor(tool) }, async (args: Record<string, unknown>) => {
       try {
+        // laya-guard: assess every mutating op before it runs (no-op unless *_GUARD_MODE is set).
+        if (tool.capability !== "read") {
+          await guard.enforce({ tool: tool.name, command: `${tool.name} ${JSON.stringify(args ?? {})}`, context: tool.name }, ctx.confirm);
+        }
         return await tool.handler(args ?? {}, ctx);
       } catch (err) {
         return toErrorResult(err);
