@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-10-26
+
+### Changed
+- Routine weekly dependency maintenance: `npm audit --audit-level=high` flagged a high-severity `body-parser` DoS advisory (GHSA-27r3-jxmh-p828) and a moderate `fast-uri` advisory chain; resolved both via `npm audit fix` (transitive bumps `body-parser` 2.3.0 → 2.4.0, `fast-uri` 3.1.8 → 3.1.9, `qs` 6.16.0 → 6.16.1), no direct dependency crossed a major version. Took the in-range patch bump for `@modelcontextprotocol/sdk` (1.32.1 → 1.32.2). `npm audit` reports 0 vulnerabilities after the bumps.
+
 ## [0.3.2] - 2026-10-19
 
 ### Changed
