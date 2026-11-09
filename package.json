@@ -1,7 +1,7 @@
 {
   "name": "@dockndevai/mcp-clickhouse",
   "mcpName": "io.github.dockndevai/mcp-clickhouse",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Model Context Protocol server for ClickHouse — query and manage databases with SQL-classification-based security modes and access-control flags.",
   "type": "module",
   "license": "MIT",
@@ -43,7 +43,7 @@
     "ai"
   ],
   "dependencies": {
-    "@clickhouse/client": "^1.7.0",
+    "@clickhouse/client": "^1.25.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.6.7"
   },
@@ -51,6 +51,6 @@
     "@types/node": "^26.5.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   }
 }

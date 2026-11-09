@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2026-11-09
+
+### Changed
+- Routine dependency/security maintenance. `npm audit --audit-level=high` reported 0
+  vulnerabilities both before and after this pass (no high/critical advisories to fix).
+- Took safe in-range minor bumps: `@clickhouse/client` 1.24.1 → 1.25.0, `vitest` 5.0.5 → 5.1.0
+  (dev dependency). No direct dependency crossed a major version boundary; `npm run typecheck`,
+  `npm run build`, and `npm test` all pass; final `npm audit` is clean.
+
+### Note
+- Found that v0.3.1–v0.3.4 were committed to `main` in prior maintenance passes but never
+  tagged/released — the npm registry's `latest` dist-tag is still 0.3.0. Tagging/publishing is
+  blocked for this automated session (release requires pushing a `v*` tag, which this session's
+  permission policy denies as "create public surface"); a human needs to push tags
+  `v0.3.1`..`v0.3.5` (or squash straight to `v0.3.5`) to actually publish.
+
 ## [0.3.4] - 2026-11-02
 
 ### Changed
