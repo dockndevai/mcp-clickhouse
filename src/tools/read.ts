@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { classifyStatement } from "../sql.js";
+import { classifyStatement, statementScope } from "../sql.js";
 import type { ToolDef } from "./types.js";
 import { jsonResult, textResult } from "./types.js";
 
@@ -149,7 +149,14 @@ export const readTools: ToolDef[] = [
           isError: true,
         };
       }
-      policy.guard({ tool: "query", capability: "read" });
+      const scope = statementScope(sql, client.defaultDatabase);
+      policy.guard({
+        tool: "query",
+        capability: "read",
+        databases: scope.databases,
+        scopeUnresolved: scope.unresolved,
+        defaultDatabase: client.defaultDatabase,
+      });
       const result = await client.runReadQuery(sql, policy.maxRows);
       return jsonResult(result);
     },

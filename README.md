@@ -21,16 +21,16 @@ The security model is **statement-aware**: every SQL statement is classified as 
 | Concern | Flag | Default | Effect |
 | --- | --- | --- | --- |
 | What can the server do? | `CLICKHOUSE_MODE` | `read-only` | `read-only` exposes read tools only (and refuses non-SELECT in `query`); `read-write` adds `execute` for writes; `admin` allows destructive statements. |
-| Which databases are in scope? | `CLICKHOUSE_DATABASE_ALLOWLIST` | *(all)* | When set, operations on other databases are refused. |
+| Which databases are in scope? | `CLICKHOUSE_DATABASE_ALLOWLIST` | *(all)* | When set, a statement that touches any other database is refused: the databases are read off the SQL itself (qualified names, `USE`, joins, subqueries, `INSERT … SELECT`, `RENAME`, …) and unqualified names count as the connection's default database (`CLICKHOUSE_DATABASE`). A statement the server cannot analyse is refused. Best-effort — back it with ClickHouse grants. |
 | Which databases are read-only forever? | `CLICKHOUSE_PROTECTED_DATABASES` | `system,information_schema` | Readable, never mutable. |
-| Can it run destructive SQL? | `CLICKHOUSE_ALLOW_DELETE` | `false` | DROP/TRUNCATE/DELETE/… need this **and** admin mode. |
+| Can it run destructive SQL? | `CLICKHOUSE_ALLOW_DELETE` | `false` | DROP/TRUNCATE/DELETE/`RENAME`/`EXCHANGE`/data-losing `ALTER` (`DROP PARTITION`/`COLUMN`/`INDEX`, `DETACH`/`CLEAR`/`REPLACE PARTITION`, `RENAME COLUMN`, `MOVE … TO TABLE`, `MODIFY TTL`, mutations)/… need this **and** admin mode. |
 | Result size cap | `CLICKHOUSE_MAX_ROWS` | `1000` | Hard cap on rows returned to the model. |
 | Preview without executing | `CLICKHOUSE_DRY_RUN` | `false` | Write/destructive statements validate + log intent, then return. |
 | Audit trail | `CLICKHOUSE_AUDIT_LOG` | `true` | Emits a JSON line to stderr per guarded operation. |
-| Interactive confirmation | *(automatic)* | — | Destructive statements prompt the human to approve via MCP elicitation before running. The prompt shows the tool, the exact arguments (the full SQL) and a fingerprint; for `DROP` / `TRUNCATE` / `DELETE` / `ALTER … DELETE|UPDATE` on a table, view, dictionary or database named in the statement, that object's version is pinned across the prompt and the statement is refused if it changed; `DROP TABLE` / `DROP DATABASE` also ask the human to type the name; a prompt nobody answers is a refusal. |
+| Interactive confirmation | *(automatic)* | — | Destructive statements prompt the human to approve via MCP elicitation before running. The prompt shows the tool, the exact arguments (the full SQL) and a fingerprint; for `DROP` / `TRUNCATE` / `DELETE` / `RENAME` / `EXCHANGE` / `ALTER` on a table, view, dictionary or database named in the statement, that object's version is pinned across the prompt and the statement is refused if it changed; `DROP TABLE` / `DROP DATABASE` also ask the human to type the name; a prompt nobody answers is a refusal. |
 | Require a human | `CLICKHOUSE_REQUIRE_HUMAN_APPROVAL` | `false` | When `true`, destructive statements are **refused** if the client cannot elicit (instead of falling back to the `CLICKHOUSE_ALLOW_DELETE` gate alone). |
 
-Statement classification lives in `src/sql.ts` and is fail-safe: `ALTER … DELETE/UPDATE` counts as destructive, and anything unparseable is treated as destructive.
+Statement classification lives in `src/sql.ts` and is fail-safe: `ALTER … DELETE/UPDATE` and the data-losing `ALTER` commands count as destructive, and anything unparseable is treated as destructive.
 
 ## Tools
 

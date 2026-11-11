@@ -11,6 +11,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   60 s request timeout, and a timeout fell through to "approved" (the `CLICKHOUSE_ALLOW_DELETE` gate had
   already passed). A prompt nobody answered therefore auto-approved a destructive statement. A timeout is now a
   refusal, and the wait defaults to 5 minutes.
+- **`CLICKHOUSE_DATABASE_ALLOWLIST` now covers the databases the SQL names, not just the optional `database`
+  argument.** Previously a statement that left `database` out (`DROP TABLE other.t`, `SELECT * FROM other.t`, an
+  `INSERT … SELECT` from another database) skipped the allowlist, and the `query` tool never checked it at all.
+  `execute` and `query` now extract every database a statement touches (qualified names, `USE`, `JOIN`s,
+  subqueries and CTEs, `INSERT … SELECT`, `RENAME` / `EXCHANGE` / `MOVE PARTITION … TO TABLE` / `REPLACE PARTITION
+  … FROM`, `SHOW … FROM`, `GRANT … ON`, `dictGet('db.d', …)`) and check each against the allowlist. Unqualified
+  names resolve to the connection's default database (`CLICKHOUSE_DATABASE`), which the `database` argument never
+  changed, so that database must be allowlisted too. When an allowlist is set and the statement cannot be analysed
+  (`remote()` / `cluster()` / `merge()` and unknown table functions, `Distributed` / `Merge` / `Buffer` engines,
+  dictionaries sourced from ClickHouse, `SYSTEM` statements other than a few that name no table, unknown statement
+  types, text the tokenizer refuses) it is refused rather than guessed at. Protected databases are now also matched on
+  the extracted names (case-insensitively), so e.g. `RENAME TABLE app.t TO system.t` is refused.
+- **Data-losing `ALTER` commands and `RENAME` / `EXCHANGE` are destructive.** `ALTER TABLE … DROP PARTITION|PART|COLUMN|INDEX|
+  PROJECTION|CONSTRAINT`, `DETACH PARTITION|PART`, `CLEAR COLUMN|INDEX|PROJECTION`, `RENAME COLUMN`, `REPLACE PARTITION`,
+  `MOVE PARTITION|PART … TO TABLE`, `FORGET PARTITION`, `UNFREEZE` and `MODIFY TTL`, and top-level `RENAME TABLE|DATABASE|
+  DICTIONARY` and `EXCHANGE TABLES|DICTIONARIES`, were classified as plain writes: no `CLICKHOUSE_ALLOW_DELETE`, no
+  confirmation. They now need admin mode + `CLICKHOUSE_ALLOW_DELETE` and a human confirmation like `DROP TABLE`, and
+  a table version is pinned across the prompt (for `RENAME` / `EXCHANGE`, every table on both sides). Commands are read
+  per comma-separated command, so `ADD COLUMN c Int8, DROP COLUMN d` is destructive; an `ALTER` the tokenizer cannot
+  read is destructive. Plain schema changes (`ADD`/`MODIFY COLUMN`, `ADD INDEX`, `ATTACH PARTITION`, `MOVE … TO DISK`)
+  stay writes.
+- **The statement scanner follows ClickHouse's lexical rules.** `stripNoise` removed line comments before strings, so a
+  `'--'` literal hid the rest of the line from the classifier (including a following `; DROP TABLE …`) and from the
+  protected-database scan. It is now a single pass that understands strings, comments (including `#`), heredocs
+  (`$$ … $$`) and backtick identifiers.
 
 ### Added
 - **Approvals are bound to the exact action.** The prompt shows the tool, the full (secret-redacted)
@@ -23,6 +48,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it changed. Statements whose target cannot be read off the SQL are bound by the fingerprint alone.
 - `CLICKHOUSE_REQUIRE_HUMAN_APPROVAL=true` — refuse destructive statements when the client cannot elicit.
 - `DROP TABLE` / `DROP DATABASE` ask the human to type the (database-qualified) name.
+- `statementScope()` in `src/sql.ts`, the database extractor behind the allowlist change above.
 
 Tracking issue: https://github.com/dockndevai/mcp-core/issues/1
 

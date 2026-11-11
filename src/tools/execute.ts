@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { canonicalArgs } from "../elicit.js";
-import { classifyStatement, parseStatementTarget, referencesDatabase } from "../sql.js";
+import { classifyStatement, parseStatementTarget, referencesDatabase, statementScope } from "../sql.js";
 import { statementCapability } from "../security.js";
 import type { ToolDef } from "./types.js";
 import { jsonResult, textResult } from "./types.js";
@@ -20,9 +20,9 @@ export const writeTools: ToolDef[] = [
     config: {
       title: "Execute a statement",
       description:
-        "Execute a single SQL statement (INSERT/CREATE/ALTER, or a destructive DROP/TRUNCATE/DELETE). " +
+        "Execute a single SQL statement (INSERT/CREATE/ALTER, or a destructive DROP/TRUNCATE/DELETE/RENAME/EXCHANGE or data-losing ALTER). " +
         "The statement is classified: writes need read-write mode; destructive statements need admin mode " +
-        "AND CLICKHOUSE_ALLOW_DELETE=true. Pass an optional `database` for allowlist/protection checks.",
+        "AND CLICKHOUSE_ALLOW_DELETE=true. Every database the statement names is checked against the allowlist/protection settings.",
       inputSchema: {
         sql: z.string().describe("A single SQL statement to execute"),
         database: z
@@ -60,7 +60,18 @@ export const writeTools: ToolDef[] = [
         }
       }
 
-      const { dryRun } = policy.guard({ tool: "execute", capability, database, destructive });
+      // The databases the statement itself names (the `database` argument is advisory: the connection
+      // runs the SQL against its own default database, so unqualified names resolve there).
+      const scope = statementScope(sql, client.defaultDatabase);
+      const { dryRun } = policy.guard({
+        tool: "execute",
+        capability,
+        database,
+        databases: scope.databases,
+        scopeUnresolved: scope.unresolved,
+        defaultDatabase: client.defaultDatabase,
+        destructive,
+      });
       if (dryRun) {
         return textResult(
           `[dry-run] Would execute (${classification.class}/${classification.keyword}): ${sql}`,
