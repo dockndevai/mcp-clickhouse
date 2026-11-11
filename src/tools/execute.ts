@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { classifyStatement, referencesDatabase } from "../sql.js";
+import { canonicalArgs } from "../elicit.js";
+import { classifyStatement, parseStatementTarget, referencesDatabase } from "../sql.js";
 import { statementCapability } from "../security.js";
 import type { ToolDef } from "./types.js";
 import { jsonResult, textResult } from "./types.js";
@@ -66,12 +67,36 @@ export const writeTools: ToolDef[] = [
         );
       }
 
-      // Destructive statements (DROP/TRUNCATE/DELETE) get a human checkpoint.
+      // Destructive statements (DROP/TRUNCATE/DELETE) get a human checkpoint. The prompt shows the
+      // exact statement (the confirmer displays and fingerprints the arguments, `sql` included).
       if (destructive) {
+        const parsed = parseStatementTarget(sql);
+        const names = parsed?.names.map((n) => ({
+          database: parsed.kind === "database" ? undefined : (n.database ?? client.defaultDatabase),
+          name: n.name,
+        }));
+        const label = names?.map((n) => (n.database === undefined ? n.name : `${n.database}.${n.name}`)).join(", ");
+        // The confirmer shows at most ~1500 chars of the arguments; never let the tail of a long
+        // statement go unseen (e.g. a harmless-looking prefix padded with comments).
+        const longStatement = canonicalArgs(args).length > 1400;
         const ok = await confirm.confirm({
-          action: `run ${classification.keyword}`,
-          target: sql.length > 120 ? `${sql.slice(0, 117)}…` : sql,
-          details: { database },
+          action: `run ${classification.keyword}${parsed && parsed.verb !== "ALTER" && parsed.verb !== "DELETE" ? ` ${parsed.kind.toUpperCase()}` : ""}`,
+          target: label ?? (sql.length > 120 ? `${sql.slice(0, 117)}…` : sql),
+          details: { database, ...(longStatement ? { "full statement": sql } : {}) },
+          // Highest-impact, irreversible: the human types the database / table name.
+          typed: parsed?.verb === "DROP" && (parsed.kind === "database" || parsed.kind === "table"),
+          // Pinned only when the target could be read off the statement; anything else is bound by the
+          // fingerprint of the exact statement text alone. Reads system.tables / system.databases.
+          probe: names
+            ? async () => {
+                const parts = await Promise.all(
+                  names.map((n) =>
+                    n.database === undefined ? client.databaseVersion(n.name) : client.tableVersion(n.database, n.name),
+                  ),
+                );
+                return parts.every((p) => p === undefined) ? undefined : parts.map((p) => p ?? "absent").join("|");
+              }
+            : undefined,
         });
         if (!ok.approved) return textResult(`Statement cancelled — ${ok.reason}.`);
       }

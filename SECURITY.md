@@ -20,6 +20,16 @@ privileged database automation and grant it the least access it needs.
   default (readable, never mutable). Add more via `CLICKHOUSE_PROTECTED_DATABASES`.
 - **Gate destructive statements.** DROP/TRUNCATE/DELETE/… require both `admin` mode
   and `CLICKHOUSE_ALLOW_DELETE=true`.
+- **Require a human for destructive statements.** Set `CLICKHOUSE_REQUIRE_HUMAN_APPROVAL=true` so a
+  destructive `execute` is refused when the client cannot show an approval prompt. Each approval is
+  bound to the exact tool and arguments (fingerprint of the full SQL, which the prompt shows in full)
+  and, when the statement names its target, to that object's version: for tables, views and
+  dictionaries a hash of its `system.tables` uuid, engine, metadata modification time and
+  `create_table_query`; for a database, its `system.databases` uuid and engine plus a hash of every
+  table in it (name, uuid, metadata mtime). If the target changed while the human was deciding, the
+  statement is refused. `DROP TABLE` and `DROP DATABASE` also ask the human to type the name. Approval
+  receipts are written to the audit log (`"audit":"approval"`, with `approvedBy` = `human` or `flag-only`).
+  A prompt nobody answers is a refusal, not an approval.
 - **Cap result size.** `CLICKHOUSE_MAX_ROWS` bounds rows returned to the model.
 - **Preview with dry-run.** `CLICKHOUSE_DRY_RUN=true` validates and logs write
   intent without executing.
@@ -29,6 +39,14 @@ privileged database automation and grant it the least access it needs.
 - Database allowlist/protection enforcement on *arbitrary* SQL is best-effort
   (statement text is scanned for protected database references). For hard
   guarantees, rely on ClickHouse RBAC for the connecting user.
+
+- Version pinning covers metadata, not data: row inserts or deletes during the prompt do not change a
+  table's token. It only applies to `DROP` (database / table / view / dictionary, not `TEMPORARY` tables),
+  `TRUNCATE TABLE`, `DELETE FROM` and `ALTER TABLE … DELETE|UPDATE` whose target can be read off the
+  statement; other destructive statements (e.g. `KILL`, `DETACH`, `ALTER` with an unusual shape) are bound
+  by the statement fingerprint alone, and the prompt shows no resource version. The probe runs on the
+  connected node (not every replica of an `ON CLUSTER` statement) and only sees objects the connecting user
+  may see in `system.tables` / `system.databases`.
 
 ## Reporting a vulnerability
 
