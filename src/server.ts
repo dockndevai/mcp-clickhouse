@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CHClient } from "./clickhouse/client.js";
 import type { AppConfig } from "./config.js";
-import { makeConfirmer } from "./elicit.js";
+import { canonicalArgs, makeConfirmer } from "./elicit.js";
 import { GuardClient, loadGuardConfig } from "./guard.js";
 import { PolicyError, SecurityPolicy } from "./security.js";
 import { annotationsFor } from "./tools/annotations.js";
@@ -37,7 +37,7 @@ export function buildServer(config: AppConfig): {
         const callCtx: ToolContext = { ...ctx, confirm: confirmer.forCall(tool.name, args ?? {}) };
         // laya-guard: assess every mutating op before it runs (no-op unless *_GUARD_MODE is set).
         if (tool.capability !== "read") {
-          await guard.enforce({ tool: tool.name, command: `${tool.name} ${JSON.stringify(args ?? {})}`, context: tool.name }, callCtx.confirm);
+          await guard.enforce({ tool: tool.name, command: `${tool.name} ${canonicalArgs(args ?? {})}`, context: tool.name }, callCtx.confirm);
         }
         return await tool.handler(args ?? {}, callCtx);
       } catch (err) {
