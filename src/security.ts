@@ -58,6 +58,16 @@ export interface GuardContext {
   tool: string;
   capability: Capability;
   database?: string;
+  /**
+   * Every database the SQL statement names (from `statementScope`), unqualified names resolved to the
+   * connection's default database. Checked against the allowlist, and (for non-read statements) against the
+   * protected databases, in addition to `database`.
+   */
+  databases?: string[];
+  /** Why the statement's databases could not be determined. With an allowlist configured this is a refusal (fail closed). */
+  scopeUnresolved?: string;
+  /** The connection's default database, only used to explain a refusal. */
+  defaultDatabase?: string;
   destructive?: boolean;
 }
 
@@ -80,8 +90,14 @@ export class SecurityPolicy {
     return this.config.databaseAllowlist.includes(db);
   }
 
+  /** Case-insensitive: `INFORMATION_SCHEMA` and `information_schema` are the same database to ClickHouse. */
   isDatabaseProtected(db: string): boolean {
-    return this.config.protectedDatabases.includes(db);
+    const l = db.toLowerCase();
+    return this.config.protectedDatabases.some((p) => p.toLowerCase() === l);
+  }
+
+  get hasAllowlist(): boolean {
+    return this.config.databaseAllowlist.length > 0;
   }
 
   get protectedDatabases(): string[] {
@@ -111,6 +127,32 @@ export class SecurityPolicy {
       }
     }
 
+    if (this.hasAllowlist && ctx.scopeUnresolved !== undefined) {
+      this.audit(ctx, "DENY", `cannot determine databases: ${ctx.scopeUnresolved}`);
+      throw new PolicyError(
+        `Refused: cannot determine which databases this statement touches (${ctx.scopeUnresolved}), so it cannot be checked ` +
+          `against CLICKHOUSE_DATABASE_ALLOWLIST. Rewrite it with explicit database-qualified names, or use a dedicated tool.`,
+      );
+    }
+    for (const db of ctx.databases ?? []) {
+      if (!this.isDatabaseAllowed(db)) {
+        this.audit(ctx, "DENY", `database '${db}' not in allowlist`);
+        const hint =
+          db === ctx.defaultDatabase
+            ? " Unqualified names resolve to the connection's default database (CLICKHOUSE_DATABASE); qualify the names or allowlist it."
+            : "";
+        throw new PolicyError(
+          `Statement touches database '${db}', which is not in the configured allowlist (CLICKHOUSE_DATABASE_ALLOWLIST).${hint}`,
+        );
+      }
+      if (ctx.capability !== "read" && this.isDatabaseProtected(db)) {
+        this.audit(ctx, "DENY", `database '${db}' is protected`);
+        throw new PolicyError(
+          `Statement touches database '${db}', which is protected (CLICKHOUSE_PROTECTED_DATABASES); mutations are refused.`,
+        );
+      }
+    }
+
     if (ctx.destructive && !this.config.allowDelete) {
       this.audit(ctx, "DENY", "delete not enabled");
       throw new PolicyError(
@@ -132,6 +174,7 @@ export class SecurityPolicy {
       tool: ctx.tool,
       capability: ctx.capability,
       database: ctx.database ?? null,
+      ...(ctx.databases ? { databases: ctx.databases } : {}),
       destructive: ctx.destructive ?? false,
       ...(reason ? { reason } : {}),
     };

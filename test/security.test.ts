@@ -53,6 +53,29 @@ describe("database allowlist + protection", () => {
   });
 });
 
+describe("statement scope (databases named by the SQL)", () => {
+  it("applies the allowlist to every database the statement names, not just `database`", () => {
+    const p = makePolicy({ mode: "admin", databaseAllowlist: ["app"] });
+    expect(() => p.guard({ tool: "execute", capability: "read", databases: ["app"] })).not.toThrow();
+    expect(() => p.guard({ tool: "execute", capability: "read", database: "app", databases: ["app", "other"] })).toThrow(/other.*allowlist/);
+  });
+  it("fails closed on an unresolved scope only when an allowlist is configured", () => {
+    const strict = makePolicy({ mode: "admin", databaseAllowlist: ["app"] });
+    expect(() => strict.guard({ tool: "query", capability: "read", databases: [], scopeUnresolved: "remote()" })).toThrow(/cannot determine/);
+    const open = makePolicy({ mode: "admin" });
+    expect(() => open.guard({ tool: "query", capability: "read", databases: [], scopeUnresolved: "remote()" })).not.toThrow();
+  });
+  it("refuses mutations that touch a protected database (case-insensitively) but allows reads of it", () => {
+    const p = makePolicy({ mode: "admin", protectedDatabases: ["INFORMATION_SCHEMA"] });
+    expect(() => p.guard({ tool: "execute", capability: "write", databases: ["information_schema"] })).toThrow(/protected/);
+    expect(() => p.guard({ tool: "query", capability: "read", databases: ["information_schema"] })).not.toThrow();
+  });
+  it("explains a refusal caused by the default database", () => {
+    const p = makePolicy({ mode: "admin", databaseAllowlist: ["app"] });
+    expect(() => p.guard({ tool: "query", capability: "read", databases: ["default"], defaultDatabase: "default" })).toThrow(/CLICKHOUSE_DATABASE/);
+  });
+});
+
 describe("destructive gating", () => {
   it("blocks destructive without allowDelete", () => {
     const p = makePolicy({ mode: "admin" });
