@@ -306,7 +306,7 @@ describe("data-losing and data-hiding statements are destructive", () => {
   it("plain schema changes are still ordinary writes", async () => {
     const s = spies();
     const { client, prompts } = await connect(config({ mode: "read-write", allowDelete: false }), yes);
-    for (const sql of ["ALTER TABLE app.t ADD COLUMN c Int8", "ALTER TABLE app.t MODIFY COLUMN c Int16", "ALTER TABLE app.t ATTACH PARTITION 1 FROM app.s"]) {
+    for (const sql of ["ALTER TABLE app.t ADD COLUMN c Int8", "ALTER TABLE app.t MODIFY COLUMN c DEFAULT 5", "ALTER TABLE app.t ATTACH PARTITION 1 FROM app.s"]) {
       const res = await client.callTool({ name: "execute", arguments: { sql } });
       expect(isErr(res), `${sql}: ${text(res)}`).toBe(false);
     }

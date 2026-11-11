@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.4.0] - 2026-11-11
 
 ### Security
+- **`CREATE OR REPLACE` / `REPLACE`, `OPTIMIZE … DEDUPLICATE|CLEANUP` and type-changing `MODIFY COLUMN` are destructive.** All
+  three lose data but classified as plain writes (no `CLICKHOUSE_ALLOW_DELETE`, no confirmation). They now need admin mode +
+  `CLICKHOUSE_ALLOW_DELETE` and a human confirmation, and the table / view / dictionary being replaced or optimized has its
+  version pinned across the prompt (a missing object reads as "absent"). Plain `CREATE`, `OPTIMIZE [FINAL]` and
+  `CREATE OR REPLACE FUNCTION` stay writes. `ALTER … MODIFY COLUMN` is destructive unless the only thing after the column name
+  is `DEFAULT`, `COMMENT`, `CODEC`, `REMOVE …`, `AFTER` / `FIRST` or a column `MODIFY|RESET SETTING`: a type (even a restated
+  one, since the existing type is not known), `MATERIALIZED` / `ALIAS` / `EPHEMERAL` or any unrecognised clause counts, and so does
+  a column `TTL`, which resets expired values to their default. `ALTER TABLE … REPLACE PARTITION` was already covered.
 - **Approval prompts are fully reviewable.** Arguments are shown in full up to 16 000 characters (previously cut at 1500, so a padded prefix could hide the tail of a long statement); a longer action is refused instead of approved blind. Secret redaction in prompts matches whole words (`bypass`/`tokenizer` are no longer shown as `[redacted]`).
 - laya-guard now receives the secret-redacted arguments (`canonicalArgs`) instead of `JSON.stringify(args)`, so credentials in tool arguments no longer reach the guard prompt, the guard daemon, or its log.
 - **Approval no longer fails open on timeout.** The human-approval prompt used the MCP SDK's default

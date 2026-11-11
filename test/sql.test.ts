@@ -152,8 +152,8 @@ describe("classifyStatement: data-losing and data-hiding statements", () => {
     "ALTER TABLE t ADD COLUMN c Int8",
     "ALTER TABLE t ADD COLUMN c String DEFAULT replace(a, 'x', 'y')",
     "ALTER TABLE t ADD COLUMN `drop` Int8",
-    "ALTER TABLE t MODIFY COLUMN c Int16",
-    "ALTER TABLE t MODIFY COLUMN c String COMMENT 'drop partition'",
+    "ALTER TABLE t MODIFY COLUMN c DEFAULT 5",
+    "ALTER TABLE t MODIFY COLUMN c COMMENT 'drop partition'",
     "ALTER TABLE t COMMENT COLUMN c 'rename and clear'",
     "ALTER TABLE t ADD INDEX i x TYPE minmax GRANULARITY 1",
     "ALTER TABLE t ATTACH PARTITION 1 FROM s",
@@ -355,7 +355,6 @@ describe("statementScope", () => {
       "",
       "-- just a comment",
       "FROBNICATE a.t",
-      "REPLACE TABLE a.t (x Int8) ENGINE = Memory",
       "SELECT 1 # ' \n FROM b.t WHERE x = '1' # '", // '#' comment
       "SELECT 'unterminated",
       "SELECT $$ unterminated",
