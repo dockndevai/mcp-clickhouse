@@ -91,7 +91,10 @@ export const writeTools: ToolDef[] = [
         // statement go unseen (e.g. a harmless-looking prefix padded with comments).
         const longStatement = canonicalArgs(args).length > 1400;
         const ok = await confirm.confirm({
-          action: `run ${classification.keyword}${parsed && parsed.verb !== "ALTER" && parsed.verb !== "DELETE" ? ` ${parsed.kind.toUpperCase()}` : ""}`,
+          action:
+            parsed?.verb === "REPLACE"
+              ? `run CREATE OR REPLACE ${parsed.kind.toUpperCase()}`
+              : `run ${classification.keyword}${parsed && parsed.verb !== "ALTER" && parsed.verb !== "DELETE" ? ` ${parsed.kind.toUpperCase()}` : ""}`,
           target: label ?? (sql.length > 120 ? `${sql.slice(0, 117)}…` : sql),
           details: { database, ...(longStatement ? { "full statement": sql } : {}) },
           // Highest-impact, irreversible: the human types the database / table name.

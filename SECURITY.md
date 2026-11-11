@@ -13,8 +13,9 @@ privileged database automation and grant it the least access it needs.
   destructive (see `src/sql.ts`). ALTER is context-sensitive — an `ALTER … DELETE`
   or `ALTER … UPDATE` mutation, and any command that loses or hides data (`DROP
   PARTITION|PART|COLUMN|INDEX|PROJECTION|CONSTRAINT`, `DETACH`/`CLEAR`/`REPLACE PARTITION`,
-  `RENAME COLUMN`, `MOVE … TO TABLE`, `FORGET PARTITION`, `UNFREEZE`, `MODIFY TTL`), is treated as
-  destructive, as are `RENAME` and `EXCHANGE`. Unknown or unparseable statements are treated as
+  `RENAME COLUMN`, `MOVE … TO TABLE`, `FORGET PARTITION`, `UNFREEZE`, `MODIFY TTL`, and a `MODIFY COLUMN`
+  that names a type or kind or sets a column `TTL`), is treated as destructive, as are `RENAME`, `EXCHANGE`,
+  `CREATE OR REPLACE TABLE|VIEW|DICTIONARY` / `REPLACE …` and `OPTIMIZE … DEDUPLICATE|CLEANUP`. Unknown or unparseable statements are treated as
   destructive (fail safe).
 - **Scope with RBAC, not just flags.** The flags are defence in depth; the primary
   control is the ClickHouse user/role the server authenticates as. Prefer a
@@ -56,7 +57,7 @@ privileged database automation and grant it the least access it needs.
 
 - Version pinning covers metadata, not data: row inserts or deletes during the prompt do not change a
   table's token. It only applies to `DROP` (database / table / view / dictionary, not `TEMPORARY` tables),
-  `TRUNCATE TABLE`, `DELETE FROM`, `ALTER TABLE …` (any command) and `RENAME` / `EXCHANGE` (every name on
+  `TRUNCATE TABLE`, `DELETE FROM`, `ALTER TABLE …` (any command), `CREATE OR REPLACE` / `REPLACE`, `OPTIMIZE TABLE` and `RENAME` / `EXCHANGE` (every name on
   both sides) whose target can be read off the statement; other destructive statements (e.g. `KILL`, `DETACH`) are bound
   by the statement fingerprint alone, and the prompt shows no resource version. The probe runs on the
   connected node (not every replica of an `ON CLUSTER` statement) and only sees objects the connecting user

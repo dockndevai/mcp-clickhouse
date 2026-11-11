@@ -80,7 +80,7 @@ export function stripNoise(sql: string): string {
 const READ_KEYWORDS = new Set(["SELECT", "WITH", "SHOW", "DESCRIBE", "DESC", "EXISTS", "EXPLAIN", "CHECK"]);
 const WRITE_KEYWORDS = new Set(["INSERT", "CREATE", "ATTACH", "OPTIMIZE", "SET", "GRANT", "REVOKE", "SYSTEM"]);
 // RENAME and EXCHANGE swap tables out from under their names (and between databases): they hide data.
-const DESTRUCTIVE_KEYWORDS = new Set(["DROP", "TRUNCATE", "DELETE", "KILL", "DETACH", "RENAME", "EXCHANGE"]);
+const DESTRUCTIVE_KEYWORDS = new Set(["DROP", "TRUNCATE", "DELETE", "KILL", "DETACH", "RENAME", "EXCHANGE", "REPLACE"]);
 
 /** Classify a single-or-multi statement SQL string. */
 export function classifyStatement(sql: string): Classification {
@@ -95,6 +95,15 @@ export function classifyStatement(sql: string): Classification {
   // are destructive; the rest (ADD/MODIFY COLUMN, ATTACH PARTITION, …) are writes.
   if (firstKeyword === "ALTER") {
     return { class: alterIsDestructive(sql, withoutTrailing) ? "destructive" : "write", keyword: "ALTER", multiStatement };
+  }
+
+  // CREATE OR REPLACE TABLE|VIEW|DICTIONARY drops what it replaces (REPLACE TABLE … is in DESTRUCTIVE_KEYWORDS);
+  // OPTIMIZE … DEDUPLICATE / CLEANUP removes rows. Plain CREATE and OPTIMIZE stay writes.
+  if (firstKeyword === "CREATE" && /^\s*CREATE\s+OR\s+REPLACE\s+(?:TEMPORARY\s+)?(?:(?:MATERIALIZED|LIVE|WINDOW)\s+)?(?:TABLE|VIEW|DICTIONARY)\b/i.test(withoutTrailing)) {
+    return { class: "destructive", keyword: firstKeyword, multiStatement };
+  }
+  if (firstKeyword === "OPTIMIZE" && optimizeRemovesRows(sql, withoutTrailing)) {
+    return { class: "destructive", keyword: firstKeyword, multiStatement };
   }
 
   let cls: StatementClass;
@@ -126,7 +135,7 @@ export type TargetKind = "database" | "table" | "view" | "dictionary";
 
 /** The object(s) a destructive statement acts on, as far as we can tell from the statement text. */
 export interface StatementTarget {
-  verb: "DROP" | "TRUNCATE" | "DELETE" | "ALTER" | "RENAME" | "EXCHANGE";
+  verb: "DROP" | "TRUNCATE" | "DELETE" | "ALTER" | "RENAME" | "EXCHANGE" | "REPLACE" | "OPTIMIZE";
   kind: TargetKind;
   /** For `kind: "database"` only `name` is set (it is the database). Otherwise `database` is absent when unqualified. */
   names: Array<{ database?: string; name: string }>;
@@ -361,6 +370,23 @@ export function parseStatementTarget(sql: string): StatementTarget | undefined {
     return q ? { verb: "ALTER", kind: "table", names: [q] } : undefined;
   }
 
+  // [CREATE OR] REPLACE [MATERIALIZED|LIVE|WINDOW] TABLE|VIEW|DICTIONARY [IF NOT EXISTS] name … — the replaced object
+  // (absent is fine: a version probe on a missing object reads as "absent"). TEMPORARY objects are left unparsed.
+  if (cur.pos === 0 && (cur.kws("CREATE", "OR", "REPLACE") || cur.kw("REPLACE"))) {
+    cur.kw("MATERIALIZED") || cur.kw("LIVE") || cur.kw("WINDOW");
+    const kind: TargetKind | undefined = cur.kw("TABLE") ? "table" : cur.kw("VIEW") ? "view" : cur.kw("DICTIONARY") ? "dictionary" : undefined;
+    if (!kind) return undefined;
+    cur.kws("IF", "NOT", "EXISTS");
+    const q = cur.qualified();
+    return q ? { verb: "REPLACE", kind, names: [q] } : undefined;
+  }
+
+  // OPTIMIZE TABLE [db.]t … (only the name is needed)
+  if (cur.kws("OPTIMIZE", "TABLE")) {
+    const q = cur.qualified();
+    return q ? { verb: "OPTIMIZE", kind: "table", names: [q] } : undefined;
+  }
+
   // RENAME TABLE|DICTIONARY|DATABASE a TO b [, c TO d …] — every name on both sides is pinned.
   if (cur.kw("RENAME")) {
     let kind: TargetKind = "table";
@@ -400,6 +426,43 @@ export function parseStatementTarget(sql: string): StatementTarget | undefined {
 
 // --- ALTER classification ---------------------------------------------------
 
+/** `OPTIMIZE … DEDUPLICATE [BY …]` and `OPTIMIZE … CLEANUP` delete rows. */
+function optimizeRemovesRows(sql: string, cleaned: string): boolean {
+  const toks = tokenize(sql);
+  if (!toks) return /\b(DEDUPLICATE|CLEANUP)\b/i.test(cleaned);
+  return toks.some((t) => t.k === "word" && /^(DEDUPLICATE|CLEANUP)$/i.test(t.v));
+}
+
+/** What may follow the column name in a `MODIFY COLUMN` that keeps the column's type (and kind) as it is. */
+const MODIFY_COLUMN_KEEPS_TYPE = new Set(["DEFAULT", "COMMENT", "CODEC", "REMOVE", "AFTER", "FIRST", "MODIFY", "RESET"]);
+
+/**
+ * Can this `MODIFY COLUMN` change a column's type or kind, or expire its values? Only the clauses that leave the
+ * stored values alone (DEFAULT, COMMENT, CODEC, REMOVE …, AFTER/FIRST, column SETTING changes) pass; anything
+ * else after the column name — a type (even a restated one: the old type is not known here), MATERIALIZED /
+ * ALIAS / EPHEMERAL, something unrecognised — counts, and so does a column TTL (expired values are reset).
+ * `i` is the index of the MODIFY token.
+ */
+function modifyColumnMayLoseData(toks: Tok[], i: number): boolean {
+  let j = i + 2; // after MODIFY COLUMN
+  const isWord = (k: number, w: string) => toks[k]?.k === "word" && toks[k]!.v.toUpperCase() === w;
+  if (isWord(j, "IF") && isWord(j + 1, "EXISTS")) j += 2;
+  const name = toks[j];
+  if (!name || (name.k !== "word" && name.k !== "id")) return true;
+  j++;
+  while (toks[j]?.k === "dot" && (toks[j + 1]?.k === "word" || toks[j + 1]?.k === "id")) j += 2; // Nested: n.a
+  const next = toks[j];
+  if (!next || next.k === "comma" || next.k === "semi") return false;
+  if (next.k !== "word" || !MODIFY_COLUMN_KEEPS_TYPE.has(next.v.toUpperCase())) return true;
+  let depth = 0;
+  for (; j < toks.length && !(depth === 0 && toks[j]!.k === "comma"); j++) {
+    if (toks[j]!.k === "lp") depth++;
+    else if (toks[j]!.k === "rp") depth--;
+    else if (depth === 0 && isWord(j, "TTL")) return true;
+  }
+  return false;
+}
+
 /** Words that start an `ALTER TABLE` command which deletes, detaches, clears, renames or swaps data. */
 const ALTER_DATA_LOSING = new Set(["DELETE", "UPDATE", "DROP", "DETACH", "CLEAR", "RENAME", "REPLACE", "EXCHANGE", "FORGET", "UNFREEZE"]);
 
@@ -433,6 +496,7 @@ function alterIsDestructive(sql: string, cleaned: string): boolean {
       if (ALTER_DATA_LOSING.has(w)) return true;
       const w2 = (toks[i + 1]?.k === "word" ? toks[i + 1]!.v : "").toUpperCase();
       if (w === "MODIFY" && w2 === "TTL") return true;
+      if (w === "MODIFY" && w2 === "COLUMN" && modifyColumnMayLoseData(toks, i)) return true;
       if (w === "MOVE") {
         // MOVE PARTITION|PART … TO DISK|VOLUME stays on this table; … TO TABLE moves the data out of it.
         for (let j = i + 1; j < toks.length && toks[j]!.k !== "comma"; j++) {
@@ -608,6 +672,7 @@ class ScopeScanner {
         case "DROP":
         case "ALTER":
         case "CREATE":
+        case "REPLACE":
         case "ATTACH":
         case "DETACH":
           this.ddl = true;
