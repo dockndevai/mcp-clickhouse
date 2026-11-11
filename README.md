@@ -27,7 +27,8 @@ The security model is **statement-aware**: every SQL statement is classified as 
 | Result size cap | `CLICKHOUSE_MAX_ROWS` | `1000` | Hard cap on rows returned to the model. |
 | Preview without executing | `CLICKHOUSE_DRY_RUN` | `false` | Write/destructive statements validate + log intent, then return. |
 | Audit trail | `CLICKHOUSE_AUDIT_LOG` | `true` | Emits a JSON line to stderr per guarded operation. |
-| Interactive confirmation | *(automatic)* | — | Destructive & high-impact actions prompt the human to approve via MCP elicitation before running; clients without elicitation fall back to the `*_ALLOW_*` gate. |
+| Interactive confirmation | *(automatic)* | — | Destructive statements prompt the human to approve via MCP elicitation before running. The prompt shows the tool, the exact arguments (the full SQL) and a fingerprint; for `DROP` / `TRUNCATE` / `DELETE` / `ALTER … DELETE|UPDATE` on a table, view, dictionary or database named in the statement, that object's version is pinned across the prompt and the statement is refused if it changed; `DROP TABLE` / `DROP DATABASE` also ask the human to type the name; a prompt nobody answers is a refusal. |
+| Require a human | `CLICKHOUSE_REQUIRE_HUMAN_APPROVAL` | `false` | When `true`, destructive statements are **refused** if the client cannot elicit (instead of falling back to the `CLICKHOUSE_ALLOW_DELETE` gate alone). |
 
 Statement classification lives in `src/sql.ts` and is fail-safe: `ALTER … DELETE/UPDATE` counts as destructive, and anything unparseable is treated as destructive.
 

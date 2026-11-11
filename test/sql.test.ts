@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyStatement, referencesDatabase, stripNoise } from "../src/sql.js";
+import { classifyStatement, parseStatementTarget, referencesDatabase, stripNoise } from "../src/sql.js";
 import { statementCapability } from "../src/security.js";
 
 describe("classifyStatement", () => {
@@ -62,5 +62,54 @@ describe("referencesDatabase", () => {
     expect(referencesDatabase("SELECT * FROM system.tables", ["system"])).toBe("system");
     expect(referencesDatabase("DROP TABLE system.foo", ["system"])).toBe("system");
     expect(referencesDatabase("SELECT * FROM app.orders", ["system"])).toBeUndefined();
+  });
+});
+
+describe("parseStatementTarget", () => {
+  const t = (sql: string) => parseStatementTarget(sql);
+
+  it("reads DROP TABLE / DATABASE / VIEW / DICTIONARY", () => {
+    expect(t("DROP TABLE events")).toEqual({ verb: "DROP", kind: "table", names: [{ name: "events" }] });
+    expect(t("drop table if exists app.events;")).toEqual({ verb: "DROP", kind: "table", names: [{ database: "app", name: "events" }] });
+    expect(t("DROP DATABASE IF EXISTS analytics ON CLUSTER c1 SYNC")).toEqual({ verb: "DROP", kind: "database", names: [{ name: "analytics" }] });
+    expect(t("DROP VIEW v")?.kind).toBe("view");
+    expect(t("DROP DICTIONARY d NO DELAY")?.kind).toBe("dictionary");
+  });
+
+  it("handles quoting, comments and multiple tables", () => {
+    expect(t("DROP /* hi */ TABLE `my db`.`we``ird` -- bye")).toEqual({
+      verb: "DROP",
+      kind: "table",
+      names: [{ database: "my db", name: "we`ird" }],
+    });
+    expect(t('DROP TABLE "a"."b", c')?.names).toEqual([{ database: "a", name: "b" }, { name: "c" }]);
+  });
+
+  it("reads TRUNCATE, DELETE FROM and ALTER TABLE … DELETE/UPDATE", () => {
+    expect(t("TRUNCATE TABLE a.b")).toEqual({ verb: "TRUNCATE", kind: "table", names: [{ database: "a", name: "b" }] });
+    expect(t("TRUNCATE b")?.names).toEqual([{ name: "b" }]);
+    expect(t("DELETE FROM a.b WHERE x = 1")).toEqual({ verb: "DELETE", kind: "table", names: [{ database: "a", name: "b" }] });
+    expect(t("ALTER TABLE a.b ON CLUSTER c DELETE WHERE x = 1")?.names).toEqual([{ database: "a", name: "b" }]);
+  });
+
+  it("leaves anything it cannot be sure about unparsed", () => {
+    for (const sql of [
+      "DROP USER bob",
+      "DROP TEMPORARY TABLE t",
+      "DROP TABLE t FORMAT JSON", // unknown trailing clause
+      "DROP TABLE t # trailing comment style we do not parse",
+      "DROP TABLE `a\\`b`",
+      "DROP TABLE t; DROP TABLE u",
+      "DROP DATABASE a.b",
+      "TRUNCATE ALL TABLES FROM db",
+      "TRUNCATE DATABASE db",
+      "KILL QUERY WHERE user = 'x'",
+      "DETACH TABLE t",
+      "SELECT 1",
+      "DROP TABLE",
+      "DROP TABLE /* unterminated",
+    ]) {
+      expect(t(sql), sql).toBeUndefined();
+    }
   });
 });

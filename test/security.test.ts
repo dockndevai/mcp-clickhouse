@@ -10,6 +10,7 @@ function makePolicy(overrides: Partial<SecurityConfig> = {}): SecurityPolicy {
     dryRun: false,
     maxRows: 1000,
     auditLog: false,
+    requireHumanApproval: false,
     ...overrides,
   });
 }

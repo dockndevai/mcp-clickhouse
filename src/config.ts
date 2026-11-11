@@ -56,6 +56,7 @@ export function loadConfig(): AppConfig {
       dryRun: bool("CLICKHOUSE_DRY_RUN", false),
       maxRows: Number(process.env.CLICKHOUSE_MAX_ROWS ?? 1000),
       auditLog: bool("CLICKHOUSE_AUDIT_LOG", true),
+      requireHumanApproval: bool("CLICKHOUSE_REQUIRE_HUMAN_APPROVAL", false),
     },
   };
 }
